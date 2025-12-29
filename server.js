@@ -9,8 +9,9 @@ const io = new Server(httpServer);
 app.use(express.static("public"));
 
 const TILE = 64;
-const WORLD_SIZE = 40;
-const TICK_RATE = 1000 / 60;
+const WORLD_TILES = 40;
+const WORLD_SIZE = WORLD_TILES * TILE;
+const TICK = 1000 / 60;
 
 const players = {};
 const spells = [];
@@ -18,58 +19,55 @@ const spells = [];
 io.on("connection", socket => {
   players[socket.id] = {
     id: socket.id,
-    tx: Math.floor(Math.random() * WORLD_SIZE),
-    ty: Math.floor(Math.random() * WORLD_SIZE),
+    x: Math.random() * WORLD_SIZE,
+    y: Math.random() * WORLD_SIZE,
+    vx: 0,
+    vy: 0,
     hp: 100,
     mana: 100,
     level: 1,
     xp: 0,
-    slow: 0,
-    moveCooldown: 0
+    slow: 0
   };
 
   socket.on("move", dir => {
     const p = players[socket.id];
-    if (!p || p.moveCooldown > 0 || p.slow > 0) return;
+    if (!p) return;
 
-    let moved = false;
+    const speed = (p.slow > 0 ? 1.5 : 3);
 
-    if (dir.w) { p.ty--; moved = true; }
-    else if (dir.s) { p.ty++; moved = true; }
-    else if (dir.a) { p.tx--; moved = true; }
-    else if (dir.d) { p.tx++; moved = true; }
+    p.vx = 0;
+    p.vy = 0;
 
-    if (moved) {
-      p.tx = Math.max(0, Math.min(WORLD_SIZE - 1, p.tx));
-      p.ty = Math.max(0, Math.min(WORLD_SIZE - 1, p.ty));
-      p.moveCooldown = 10; // movement speed control
-    }
+    if (dir.w) p.vy -= speed;
+    if (dir.s) p.vy += speed;
+    if (dir.a) p.vx -= speed;
+    if (dir.d) p.vx += speed;
   });
 
   socket.on("cast", data => {
     const p = players[socket.id];
     if (!p) return;
 
-    const spellDefs = {
-      fire: { cost: 20, speed: 8, dmg: 20 },
-      ice: { cost: 25, speed: 6, dmg: 15, slow: 60 },
-      lightning: { cost: 35, speed: 14, dmg: 40 }
+    const spellsDef = {
+      fire: { cost: 20, speed: 10, dmg: 20 },
+      ice: { cost: 25, speed: 7, dmg: 15, slow: 90 },
+      lightning: { cost: 35, speed: 16, dmg: 40 }
     };
 
-    const s = spellDefs[data.type];
-    if (!s || p.mana < s.cost) return;
+    const def = spellsDef[data.type];
+    if (!def || p.mana < def.cost) return;
 
-    p.mana -= s.cost;
+    p.mana -= def.cost;
 
     spells.push({
       owner: socket.id,
-      type: data.type,
-      x: p.tx * TILE + TILE / 2,
-      y: p.ty * TILE + TILE / 2,
-      vx: Math.cos(data.angle) * s.speed,
-      vy: Math.sin(data.angle) * s.speed,
-      damage: s.dmg + p.level * 4,
-      slow: s.slow || 0
+      x: p.x,
+      y: p.y,
+      vx: Math.cos(data.angle) * def.speed,
+      vy: Math.sin(data.angle) * def.speed,
+      damage: def.dmg + p.level * 4,
+      slow: def.slow || 0
     });
   });
 
@@ -79,8 +77,14 @@ io.on("connection", socket => {
 setInterval(() => {
   for (const id in players) {
     const p = players[id];
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
+    p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
+
     p.mana = Math.min(100, p.mana + 0.15);
-    if (p.moveCooldown > 0) p.moveCooldown--;
     if (p.slow > 0) p.slow--;
   }
 
@@ -93,10 +97,7 @@ setInterval(() => {
       if (id === s.owner) continue;
       const p = players[id];
 
-      const px = p.tx * TILE + TILE / 2;
-      const py = p.ty * TILE + TILE / 2;
-
-      if (Math.hypot(px - s.x, py - s.y) < 20) {
+      if (Math.hypot(p.x - s.x, p.y - s.y) < 20) {
         p.hp -= s.damage;
         if (s.slow) p.slow = s.slow;
 
@@ -106,8 +107,8 @@ setInterval(() => {
           killer.level = 1 + Math.floor(killer.xp / 200);
 
           p.hp = 100;
-          p.tx = Math.floor(Math.random() * WORLD_SIZE);
-          p.ty = Math.floor(Math.random() * WORLD_SIZE);
+          p.x = Math.random() * WORLD_SIZE;
+          p.y = Math.random() * WORLD_SIZE;
         }
 
         spells.splice(i, 1);
@@ -116,13 +117,13 @@ setInterval(() => {
     }
 
     if (
-      s.x < 0 || s.y < 0 ||
-      s.x > WORLD_SIZE * TILE ||
-      s.y > WORLD_SIZE * TILE
+      s.x < -100 || s.y < -100 ||
+      s.x > WORLD_SIZE + 100 ||
+      s.y > WORLD_SIZE + 100
     ) spells.splice(i, 1);
   }
 
   io.emit("state", { players, spells });
-}, TICK_RATE);
+}, TICK);
 
 httpServer.listen(process.env.PORT || 3000);
