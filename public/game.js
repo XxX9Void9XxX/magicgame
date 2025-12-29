@@ -2,7 +2,8 @@ const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const healthFill = document.getElementById("healthFill");
-const slots = document.querySelectorAll(".slot");
+const manaFill = document.getElementById("manaFill");
+const hotbar = document.getElementById("hotbar");
 const minimap = document.getElementById("minimap");
 const mmCtx = minimap.getContext("2d");
 
@@ -19,14 +20,8 @@ const keys = {};
 const particles = [];
 let camX=0, camY=0;
 
-const spellList = ["fire","ice","lightning"];
-let selectedIndex = 0;
-
 window.addEventListener("keydown", e=>{
   keys[e.key]=true;
-  if(e.key==="1") selectSpell(0);
-  if(e.key==="2") selectSpell(1);
-  if(e.key==="3") selectSpell(2);
 });
 window.addEventListener("keyup", e=>keys[e.key]=false);
 
@@ -39,24 +34,28 @@ canvas.addEventListener("click", e=>{
   socket.emit("cast",{angle,type:spellType});
 });
 
-// Hotbar click
-slots.forEach((slot,index)=>{
-  slot.addEventListener("click",()=>selectSpell(index));
-});
-
-// Mouse wheel scroll
+// Scroll to change spell
 window.addEventListener("wheel", e=>{
-  if(e.deltaY<0) selectedIndex = (selectedIndex+spellList.length-1)%spellList.length;
-  else selectedIndex = (selectedIndex+1)%spellList.length;
-  selectSpell(selectedIndex);
+  const me = state.players[socket.id]; if(!me) return;
+  if(me.abilities.length <= 1) return;
+  let idx = me.abilities.indexOf(spellType);
+  if(e.deltaY<0) idx = (idx+me.abilities.length-1)%me.abilities.length;
+  else idx = (idx+1)%me.abilities.length;
+  spellType = me.abilities[idx];
 });
 
-function selectSpell(index){
-  selectedIndex=index;
-  spellType=spellList[index];
-  slots.forEach(s=>s.classList.remove("selected"));
-  slots[index].classList.add("selected");
-}
+// Dynamic hotbar
+hotbar.addEventListener("click", e=>{
+  const me = state.players[socket.id]; if(!me) return;
+  const slots = [...hotbar.children];
+  const rect = hotbar.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const slotWidth = rect.width / slots.length;
+  const index = Math.floor(x/slotWidth);
+  if(index < me.abilities.length){
+    spellType = me.abilities[index];
+  }
+});
 
 socket.on("state", s=>state=s);
 
@@ -114,13 +113,25 @@ function draw(){
   // Draw crates
   for(const c of state.crates){
     ctx.font="28px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    const emoji = c.ability==="ice"?"❄️":"⚡";
-    ctx.fillText("📦", c.x+camX, c.y+camY); // box
-    ctx.fillText(emoji, c.x+camX, c.y+camY); // show ability inside
+    ctx.fillText("📦", c.x+camX, c.y+camY);
   }
 
   // Player UI
   healthFill.style.width=`${me.hp}%`;
+  manaFill.style.width=`${me.mana}%`;
+
+  // Dynamic hotbar display
+  hotbar.innerHTML="";
+  me.abilities.forEach(a=>{
+    let emoji = "🔥";
+    if(a==="ice") emoji="❄️";
+    if(a==="lightning") emoji="⚡";
+    const div = document.createElement("div");
+    div.classList.add("slot");
+    if(a===spellType) div.classList.add("selected");
+    div.textContent=emoji;
+    hotbar.appendChild(div);
+  });
 
   // Minimap
   mmCtx.clearRect(0,0,150,150);
