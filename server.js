@@ -6,10 +6,9 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
-app.use(express.static("public"));
-
+// Increased map size by 1.5×
 const TILE = 64;
-const WORLD_TILES = 40;
+const WORLD_TILES = Math.floor(40*1.5); // was 40
 const WORLD_SIZE = WORLD_TILES * TILE;
 const TICK = 1000 / 60;
 const CRATE_RESPAWN = 10000; // 10 seconds
@@ -18,10 +17,12 @@ const players = {};
 const spells = [];
 const crates = [];
 
-const crateAbilities = ["ice","lightning","dark","light","poison","healing"]; // Add new spells
+// All possible abilities
+const crateAbilities = ["ice","lightning","dark","light","poison","healing"];
 
-// Spawn initial crates
-for(let i = 0; i < 5; i++){
+// Spawn 1.5× more crates initially
+const initialCrates = Math.floor(5 * 1.5); 
+for(let i = 0; i < initialCrates; i++){
   crates.push({
     x: Math.random()*WORLD_SIZE,
     y: Math.random()*WORLD_SIZE,
@@ -63,10 +64,10 @@ io.on("connection", socket => {
       fire: { cost: 20, speed: 9, dmg: 20 },
       ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
       lightning: { cost: 35, speed: 16, dmg: 40 },
-      dark: { cost: 30, speed: 5, dmg: 5, debuff: {type:"weaken",duration:600} }, // 10s
-      light: { cost: 30, speed: 5, dmg: 5, debuff: {type:"manaBlock",duration:300} }, // 5s
+      dark: { cost: 30, speed: 5, dmg: 5, debuff: {type:"weaken",duration:600} },
+      light: { cost: 30, speed: 5, dmg: 5, debuff: {type:"manaBlock",duration:300} },
       poison: { cost: 25, speed: 4, dmg: 5, debuff: {type:"poison",duration:300} },
-      healing: { cost: 20, speed: 0, heal: 20 } // instant heal on self
+      healing: { cost: 20, speed: 0, heal: 20 }
     };
 
     const def = defs[data.type];
@@ -106,11 +107,10 @@ setInterval(()=>{
     for(const d in p.debuffs){
       p.debuffs[d]--;
       if(p.debuffs[d]<=0) delete p.debuffs[d];
-      if(d==="poison") p.hp -= 0.2; // continuous small poison damage
+      if(d==="poison") p.hp -= 0.2;
     }
   }
 
-  // Spells & collisions
   for(let i=spells.length-1;i>=0;i--){
     const s = spells[i];
     s.x += s.vx; s.y += s.vy;
@@ -128,13 +128,11 @@ setInterval(()=>{
           killer.xp+=50;
           killer.level = 1+Math.floor(killer.xp/200);
 
-          // Drop non-fire abilities as crates
           const dropAbilities = p.abilities.filter(a=>a!=="fire");
           for(const a of dropAbilities){
             crates.push({x: p.x, y: p.y, ability: a});
           }
 
-          // Respawn player
           p.hp=100;
           p.mana=100;
           p.x=Math.random()*WORLD_SIZE;
@@ -148,7 +146,6 @@ setInterval(()=>{
     if(s.x<-100||s.y<-100||s.x>WORLD_SIZE+100||s.y>WORLD_SIZE+100) spells.splice(i,1);
   }
 
-  // Crates pickups (only if player doesn't already have ability)
   for(let i=crates.length-1;i>=0;i--){
     const c = crates[i];
     for(const id in players){
