@@ -1,182 +1,105 @@
 import express from "express";
-import { createServer } from "http";
+import http from "http";
 import { Server } from "socket.io";
 
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer);
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-// Serve static files
+const PORT = process.env.PORT || 3000;
 app.use(express.static("public"));
 
-// Fix for Render: serve index.html on /
-app.get("/", (req, res) => {
-  res.sendFile("index.html", { root: "public" });
+const WORLD_SIZE = 40*1.5*64; // match client
+const TILE = 64;
+let players = {};
+let spells = [];
+let crates = [];
+
+function randomPos(){ return {x:Math.random()*WORLD_SIZE, y:Math.random()*WORLD_SIZE}; }
+
+function spawnCrates(){
+  if(crates.length>=players.length*1.5) return; 
+  crates.push({ ...randomPos(), ability:["ice","lightning","dark","light","poison","healing","water","lava","wind"][Math.floor(Math.random()*9)] });
+}
+setInterval(spawnCrates,5000);
+
+io.on("connection", socket=>{
+  const id = socket.id;
+  players[id]={x:WORLD_SIZE/2,y:WORLD_SIZE/2,hp:100,mana:100,abilities:["fire"],vx:0,vy:0};
+  console.log("Player connected",id);
+
+  socket.on("move", data=>{
+    const p = players[id]; if(!p) return;
+    const speed=6;
+    let dx=0, dy=0;
+    if(data.w) dy-=speed;
+    if(data.s) dy+=speed;
+    if(data.a) dx-=speed;
+    if(data.d) dx+=speed;
+    p.x=Math.min(Math.max(p.x+dx,0),WORLD_SIZE);
+    p.y=Math.min(Math.max(p.y+dy,0),WORLD_SIZE);
+  });
+
+  socket.on("cast", ({angle,type})=>{
+    const p = players[id]; if(!p) return;
+    if(!p.abilities.includes(type)) return;
+    const speed=8;
+    spells.push({x:p.x,y:p.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,type,owner:id});
+  });
+
+  socket.on("disconnect",()=>{ delete players[id]; });
 });
 
-// Map & game settings
-const TILE = 64;
-const WORLD_TILES = Math.floor(40*1.5); // 1.5× bigger map
-const WORLD_SIZE = WORLD_TILES * TILE;
-const TICK = 1000 / 60;
-const CRATE_RESPAWN = 10000; // 10 seconds
-
-const players = {};
-const spells = [];
-const crates = [];
-
-// All possible abilities
-const crateAbilities = ["ice","lightning","dark","light","poison","healing"];
-
-// Spawn 1.5× more crates initially
-const initialCrates = Math.floor(5 * 1.5);
-for(let i = 0; i < initialCrates; i++){
-  crates.push({
-    x: Math.random()*WORLD_SIZE,
-    y: Math.random()*WORLD_SIZE,
-    ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]
-  });
+// Spell hits and effects
+function handleSpells(){
+  for(let i=spells.length-1;i>=0;i--){
+    const s=spells[i];
+    s.x+=s.vx; s.y+=s.vy;
+    if(s.x<0||s.y<0||s.x>WORLD_SIZE||s.y>WORLD_SIZE){spells.splice(i,1); continue;}
+    for(const pid in players){
+      if(pid===s.owner) continue;
+      const p=players[pid];
+      const dx=s.x-p.x, dy=s.y-p.y;
+      if(Math.sqrt(dx*dx+dy*dy)<20){
+        // Hit effects
+        switch(s.type){
+          case "fire": p.hp-=15; break;
+          case "ice": p.hp-=10; break;
+          case "lightning": p.hp-=20; break;
+          case "dark": p.hp-=5; p.darkDebuff=Date.now()+10000; break;
+          case "light": p.lightDebuff=Date.now()+5000; break;
+          case "poison": p.poisonDebuff=Date.now()+5000; break;
+          case "healing": players[s.owner].hp=Math.min(players[s.owner].hp+10,100); break;
+          case "water": p.disableCast=Date.now()+3000; break;
+          case "lava": p.hp-=30; break;
+          case "wind": p.vx=(p.x-s.x>0?1:-1)*5; p.vy=(p.y-s.y>0?1:-1)*2; p.windDebuff=Date.now()+5000; break;
+        }
+        spells.splice(i,1); break;
+      }
+    }
+  }
 }
 
-io.on("connection", socket => {
-  // Player initialization
-  players[socket.id] = {
-    id: socket.id,
-    x: Math.random()*WORLD_SIZE,
-    y: Math.random()*WORLD_SIZE,
-    vx: 0,
-    vy: 0,
-    hp: 100,
-    mana: 100,
-    level: 1,
-    xp: 0,
-    slow: 0,
-    abilities: ["fire"]
-  };
-
-  socket.on("move", dir => {
-    const p = players[socket.id];
-    if(!p) return;
-    const speed = p.slow>0?1.5:3;
-    p.vx=0; p.vy=0;
-    if(dir.w) p.vy-=speed;
-    if(dir.s) p.vy+=speed;
-    if(dir.a) p.vx-=speed;
-    if(dir.d) p.vx+=speed;
-  });
-
-  socket.on("cast", data => {
-    const p = players[socket.id];
-    if(!p || !p.abilities.includes(data.type)) return;
-
-    const defs = {
-      fire: { cost: 20, speed: 9, dmg: 20 },
-      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
-      lightning: { cost: 35, speed: 16, dmg: 40 },
-      dark: { cost: 30, speed: 5, dmg: 5, debuff: {type:"weaken",duration:600} },
-      light: { cost: 30, speed: 5, dmg: 5, debuff: {type:"manaBlock",duration:300} },
-      poison: { cost: 25, speed: 4, dmg: 5, debuff: {type:"poison",duration:300} },
-      healing: { cost: 20, speed: 0, heal: 20 }
-    };
-
-    const def = defs[data.type];
-    if(!def || p.mana < def.cost) return;
-
-    p.mana -= def.cost;
-
-    if(data.type==="healing"){
-      p.hp = Math.min(100,p.hp + def.heal);
-    } else {
-      spells.push({
-        owner: socket.id,
-        type: data.type,
-        x: p.x,
-        y: p.y,
-        vx: Math.cos(data.angle)*def.speed,
-        vy: Math.sin(data.angle)*def.speed,
-        damage: def.dmg + p.level*4,
-        slow: def.slow || 0,
-        debuff: def.debuff
-      });
+// Apply continuous effects
+function applyDebuffs(){
+  const now = Date.now();
+  for(const id in players){
+    const p=players[id];
+    if(p.poisonDebuff && now<p.poisonDebuff) p.hp-=0.2;
+    if(p.darkDebuff && now<p.darkDebuff) p.hp=p.hp; // future: reduce attack
+    if(p.windDebuff && now<p.windDebuff) p.hp=p.hp; // future: reduce attack
+    if(p.hp<=0){
+      // Drop all non-fire abilities
+      p.abilities=p.abilities.filter(a=>a==="fire");
+      p.hp=100; p.x=WORLD_SIZE/2; p.y=WORLD_SIZE/2;
     }
-  });
-
-  socket.on("disconnect", () => delete players[socket.id]);
-});
+  }
+}
 
 setInterval(()=>{
-  for(const id in players){
-    const p = players[id];
-    p.x += p.vx; p.y += p.vy;
-    p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
-    p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
-    p.mana = Math.min(100, p.mana+0.15);
-    if(p.slow>0) p.slow--;
-    if(!p.debuffs) p.debuffs = {};
-    for(const d in p.debuffs){
-      p.debuffs[d]--;
-      if(p.debuffs[d]<=0) delete p.debuffs[d];
-      if(d==="poison") p.hp -= 0.2;
-    }
-  }
-
-  for(let i=spells.length-1;i>=0;i--){
-    const s = spells[i];
-    s.x += s.vx; s.y += s.vy;
-
-    for(const id in players){
-      if(id===s.owner) continue;
-      const p = players[id];
-      if(Math.hypot(p.x-s.x,p.y-s.y)<18){
-        p.hp -= s.damage;
-        if(s.slow) p.slow = s.slow;
-        if(s.debuff) p.debuffs[s.debuff.type] = s.debuff.duration;
-
-        if(p.hp<=0){
-          const killer = players[s.owner];
-          killer.xp+=50;
-          killer.level = 1+Math.floor(killer.xp/200);
-
-          const dropAbilities = p.abilities.filter(a=>a!=="fire");
-          for(const a of dropAbilities){
-            crates.push({x: p.x, y: p.y, ability: a});
-          }
-
-          p.hp=100;
-          p.mana=100;
-          p.x=Math.random()*WORLD_SIZE;
-          p.y=Math.random()*WORLD_SIZE;
-          p.abilities = ["fire"];
-        }
-        spells.splice(i,1);
-        break;
-      }
-    }
-    if(s.x<-100||s.y<-100||s.x>WORLD_SIZE+100||s.y>WORLD_SIZE+100) spells.splice(i,1);
-  }
-
-  for(let i=crates.length-1;i>=0;i--){
-    const c = crates[i];
-    for(const id in players){
-      const p = players[id];
-      if(Math.hypot(p.x-c.x,p.y-c.y)<20){
-        if(!p.abilities.includes(c.ability)){
-          p.abilities.push(c.ability);
-          crates.splice(i,1);
-          setTimeout(()=>{
-            crates.push({
-              x: Math.random()*WORLD_SIZE,
-              y: Math.random()*WORLD_SIZE,
-              ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]
-            });
-          }, CRATE_RESPAWN);
-        }
-        break;
-      }
-    }
-  }
-
+  handleSpells();
+  applyDebuffs();
   io.emit("state",{players,spells,crates});
-}, TICK);
+},1000/60);
 
-httpServer.listen(process.env.PORT || 3000, () => console.log("Server running"));
+server.listen(PORT,()=>console.log("Server running on port",PORT));
