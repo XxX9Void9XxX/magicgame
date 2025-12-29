@@ -18,7 +18,7 @@ const players = {};
 const spells = [];
 const crates = [];
 
-const crateAbilities = ["ice","lightning"]; // Can add more later
+const crateAbilities = ["ice","lightning","dark","light","poison","healing"]; // Add new spells
 
 // Spawn initial crates
 for(let i = 0; i < 5; i++){
@@ -30,7 +30,6 @@ for(let i = 0; i < 5; i++){
 }
 
 io.on("connection", socket => {
-  // Start with only Fire
   players[socket.id] = {
     id: socket.id,
     x: Math.random()*WORLD_SIZE,
@@ -62,31 +61,40 @@ io.on("connection", socket => {
 
     const defs = {
       fire: { cost: 20, speed: 9, dmg: 20 },
-      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 }, // Ice slows
-      lightning: { cost: 35, speed: 16, dmg: 40 }
+      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
+      lightning: { cost: 35, speed: 16, dmg: 40 },
+      dark: { cost: 30, speed: 5, dmg: 5, debuff: {type:"weaken",duration:600} }, // 10s
+      light: { cost: 30, speed: 5, dmg: 5, debuff: {type:"manaBlock",duration:300} }, // 5s
+      poison: { cost: 25, speed: 4, dmg: 5, debuff: {type:"poison",duration:300} },
+      healing: { cost: 20, speed: 0, heal: 20 } // instant heal on self
     };
+
     const def = defs[data.type];
     if(!def || p.mana < def.cost) return;
 
     p.mana -= def.cost;
 
-    spells.push({
-      owner: socket.id,
-      type: data.type,
-      x: p.x,
-      y: p.y,
-      vx: Math.cos(data.angle)*def.speed,
-      vy: Math.sin(data.angle)*def.speed,
-      damage: def.dmg + p.level*4,
-      slow: def.slow || 0
-    });
+    if(data.type==="healing"){
+      p.hp = Math.min(100,p.hp + def.heal);
+    } else {
+      spells.push({
+        owner: socket.id,
+        type: data.type,
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(data.angle)*def.speed,
+        vy: Math.sin(data.angle)*def.speed,
+        damage: def.dmg + p.level*4,
+        slow: def.slow || 0,
+        debuff: def.debuff
+      });
+    }
   });
 
   socket.on("disconnect", () => delete players[socket.id]);
 });
 
 setInterval(()=>{
-  // Player movement & mana regen
   for(const id in players){
     const p = players[id];
     p.x += p.vx; p.y += p.vy;
@@ -94,6 +102,12 @@ setInterval(()=>{
     p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
     p.mana = Math.min(100, p.mana+0.15);
     if(p.slow>0) p.slow--;
+    if(!p.debuffs) p.debuffs = {};
+    for(const d in p.debuffs){
+      p.debuffs[d]--;
+      if(p.debuffs[d]<=0) delete p.debuffs[d];
+      if(d==="poison") p.hp -= 0.2; // continuous small poison damage
+    }
   }
 
   // Spells & collisions
@@ -106,7 +120,8 @@ setInterval(()=>{
       const p = players[id];
       if(Math.hypot(p.x-s.x,p.y-s.y)<18){
         p.hp -= s.damage;
-        if(s.slow) p.slow = s.slow; // Apply slow for Ice
+        if(s.slow) p.slow = s.slow;
+        if(s.debuff) p.debuffs[s.debuff.type] = s.debuff.duration;
 
         if(p.hp<=0){
           const killer = players[s.owner];
@@ -133,7 +148,7 @@ setInterval(()=>{
     if(s.x<-100||s.y<-100||s.x>WORLD_SIZE+100||s.y>WORLD_SIZE+100) spells.splice(i,1);
   }
 
-  // Crate pickups (only if player doesn't already have ability)
+  // Crates pickups (only if player doesn't already have ability)
   for(let i=crates.length-1;i>=0;i--){
     const c = crates[i];
     for(const id in players){
@@ -142,16 +157,15 @@ setInterval(()=>{
         if(!p.abilities.includes(c.ability)){
           p.abilities.push(c.ability);
           crates.splice(i,1);
-          // Respawn new crate
           setTimeout(()=>{
             crates.push({
               x: Math.random()*WORLD_SIZE,
               y: Math.random()*WORLD_SIZE,
               ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]
             });
-          }, 10000);
+          }, CRATE_RESPAWN);
         }
-        break; // if player already has it, crate stays
+        break;
       }
     }
   }
