@@ -14,29 +14,22 @@ minimap.width = 150; minimap.height = 150;
 const TILE = 64;
 const WORLD_SIZE = 40*TILE;
 
-let state = { players:{}, spells:[], upgrades:[] };
+let state = { players:{}, spells:[] };
 let spellType = "fire";
 const keys = {};
 const particles = [];
 let camX=0, camY=0;
 
-// Upgrade spawn settings
-const UPGRADE_TYPES = [{type:"mana", emoji:"💧"}];
-const UPGRADE_RESPAWN = 5000; // ms
+const spellList = ["fire","ice","lightning"];
+let selectedIndex = 0;
 
 window.addEventListener("keydown", e=>{
   keys[e.key]=true;
-  if(e.key==="1") selectSpell("fire",0);
-  if(e.key==="2") selectSpell("ice",1);
-  if(e.key==="3") selectSpell("lightning",2);
+  if(e.key==="1") selectSpell(0);
+  if(e.key==="2") selectSpell(1);
+  if(e.key==="3") selectSpell(2);
 });
 window.addEventListener("keyup", e=>keys[e.key]=false);
-
-function selectSpell(type,index){
-  spellType=type;
-  slots.forEach(s=>s.classList.remove("selected"));
-  slots[index].classList.add("selected");
-}
 
 canvas.addEventListener("click", e=>{
   const me=state.players[socket.id]; if(!me) return;
@@ -46,6 +39,25 @@ canvas.addEventListener("click", e=>{
   const angle=Math.atan2(my-me.y, mx-me.x);
   socket.emit("cast",{angle,type:spellType});
 });
+
+// Hotbar click
+slots.forEach((slot,index)=>{
+  slot.addEventListener("click",()=>selectSpell(index));
+});
+
+// Mouse wheel scroll
+window.addEventListener("wheel", e=>{
+  if(e.deltaY<0) selectedIndex = (selectedIndex+spellList.length-1)%spellList.length;
+  else selectedIndex = (selectedIndex+1)%spellList.length;
+  selectSpell(selectedIndex);
+});
+
+function selectSpell(index){
+  selectedIndex=index;
+  spellType=spellList[index];
+  slots.forEach(s=>s.classList.remove("selected"));
+  slots[index].classList.add("selected");
+}
 
 socket.on("state", s=>state=s);
 
@@ -100,18 +112,6 @@ function draw(){
     if(p.life<=0) particles.splice(i,1);
   }
 
-  // Draw upgrades (mana pickups)
-  for(let i=0;i<state.upgrades.length;i++){
-    const u = state.upgrades[i];
-    ctx.font="28px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText("💧", u.x + camX, u.y + camY);
-    if(me && Math.hypot(me.x-u.x, me.y-u.y)<20){
-      me.mana=Math.min(100, me.mana+50);
-      state.upgrades.splice(i,1);
-      setTimeout(()=>{state.upgrades.push({x:Math.random()*WORLD_SIZE, y:Math.random()*WORLD_SIZE})},UPGRADE_RESPAWN);
-    }
-  }
-
   // Player UI
   healthFill.style.width=`${me.hp}%`;
   manaFill.style.width=`${me.mana}%`;
@@ -124,15 +124,6 @@ function draw(){
     mmCtx.fillStyle=id===socket.id?"cyan":"red";
     mmCtx.fillRect(p.x*mmScale,p.y*mmScale,4,4);
   }
-  for(const u of state.upgrades){
-    mmCtx.fillStyle="blue";
-    mmCtx.fillRect(u.x*mmScale,u.y*mmScale,4,4);
-  }
-}
-
-// Initial random upgrade spawn
-for(let i=0;i<5;i++){
-  state.upgrades.push({x:Math.random()*WORLD_SIZE, y:Math.random()*WORLD_SIZE});
 }
 
 function loop(){update(); draw(); requestAnimationFrame(loop);}
