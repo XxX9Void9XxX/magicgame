@@ -6,29 +6,44 @@ const ui = document.getElementById("ui");
 canvas.width = innerWidth;
 canvas.height = innerHeight;
 
+const TILE = 64;
 let state = { players:{}, spells:[] };
+let spellType = "fire";
 const keys = {};
 
-window.addEventListener("keydown", e => keys[e.key] = true);
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "1") spellType = "fire";
+  if (e.key === "2") spellType = "ice";
+  if (e.key === "3") spellType = "lightning";
+});
 window.addEventListener("keyup", e => keys[e.key] = false);
 
 canvas.addEventListener("click", e => {
   const me = state.players[socket.id];
   if (!me) return;
+
   const angle = Math.atan2(
     e.clientY - canvas.height/2,
     e.clientX - canvas.width/2
   );
-  socket.emit("cast", { angle });
+  socket.emit("cast", { angle, type: spellType });
 });
 
 socket.on("state", s => state = s);
 
 function update() {
   socket.emit("move", {
-    w: keys["w"], a: keys["a"],
-    s: keys["s"], d: keys["d"]
+    w: keys.w, a: keys.a,
+    s: keys.s, d: keys.d
   });
+}
+
+function drawGrid(camX, camY) {
+  ctx.strokeStyle = "#222";
+  for (let x=0;x<40;x++)
+    for (let y=0;y<40;y++)
+      ctx.strokeRect(x*TILE+camX,y*TILE+camY,TILE,TILE);
 }
 
 function draw() {
@@ -36,33 +51,43 @@ function draw() {
   const me = state.players[socket.id];
   if (!me) return;
 
-  ctx.save();
-  ctx.translate(
-    canvas.width/2 - me.x,
-    canvas.height/2 - me.y
-  );
+  const camX = canvas.width/2 - me.tx*TILE;
+  const camY = canvas.height/2 - me.ty*TILE;
+
+  drawGrid(camX, camY);
 
   for (const id in state.players) {
     const p = state.players[id];
-    ctx.fillStyle = id === socket.id ? "cyan" : "red";
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,15,0,Math.PI*2);
-    ctx.fill();
+    ctx.fillStyle = id===socket.id?"cyan":"red";
+    ctx.fillRect(
+      p.tx*TILE+camX+16,
+      p.ty*TILE+camY+16,
+      32,32
+    );
   }
 
   ctx.fillStyle = "orange";
-  for (const s of state.spells) {
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,6,0,Math.PI*2);
-    ctx.fill();
+  for (const s of state.spells)
+    ctx.fillRect(s.x+camX-4,s.y+camY-4,8,8);
+
+  // minimap
+  ctx.fillStyle = "#000a";
+  ctx.fillRect(canvas.width-160,10,150,150);
+  for (const id in state.players) {
+    const p = state.players[id];
+    ctx.fillStyle = id===socket.id?"cyan":"red";
+    ctx.fillRect(
+      canvas.width-160 + p.tx*3,
+      10 + p.ty*3,
+      4,4
+    );
   }
 
-  ctx.restore();
-
   ui.innerHTML = `
-    HP: ${me.hp}<br>
-    Mana: ${me.mana}<br>
-    Level: ${me.level}
+  HP: ${me.hp}<br>
+  Mana: ${me.mana.toFixed(0)}<br>
+  Level: ${me.level}<br>
+  Spell: ${spellType} (1/2/3)
   `;
 }
 
