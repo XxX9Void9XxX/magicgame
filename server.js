@@ -12,18 +12,20 @@ const TILE = 64;
 const WORLD_TILES = 40;
 const WORLD_SIZE = WORLD_TILES * TILE;
 const TICK = 1000 / 60;
-const UPGRADE_RESPAWN = 5000;
+const CRATE_RESPAWN = 10000; // 10 seconds
 
 const players = {};
 const spells = [];
-const upgrades = [];
+const crates = [];
 
-// initialize some upgrades
+// Initialize some crates with random abilities
+const crateAbilities = ["ice","lightning"];
 for(let i = 0; i < 5; i++){
-  upgrades.push({x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE});
+  crates.push({x: Math.random()*WORLD_SIZE, y: Math.random()*WORLD_SIZE, ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]});
 }
 
 io.on("connection", socket => {
+  // Start with only Fire
   players[socket.id] = {
     id: socket.id,
     x: Math.random() * WORLD_SIZE,
@@ -34,15 +36,15 @@ io.on("connection", socket => {
     mana: 100,
     level: 1,
     xp: 0,
-    slow: 0
+    slow: 0,
+    abilities: ["fire"]
   };
 
   socket.on("move", dir => {
     const p = players[socket.id];
     if (!p) return;
     const speed = p.slow > 0 ? 1.5 : 3;
-    p.vx = 0;
-    p.vy = 0;
+    p.vx = 0; p.vy = 0;
     if (dir.w) p.vy -= speed;
     if (dir.s) p.vy += speed;
     if (dir.a) p.vx -= speed;
@@ -51,7 +53,8 @@ io.on("connection", socket => {
 
   socket.on("cast", data => {
     const p = players[socket.id];
-    if (!p) return;
+    if (!p || !p.abilities.includes(data.type)) return; // can only cast unlocked abilities
+
     const defs = {
       fire: { cost: 20, speed: 9, dmg: 20 },
       ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
@@ -59,66 +62,11 @@ io.on("connection", socket => {
     };
     const def = defs[data.type];
     if (!def || p.mana < def.cost) return;
+
     p.mana -= def.cost;
     spells.push({
       owner: socket.id,
       type: data.type,
       x: p.x,
       y: p.y,
-      vx: Math.cos(data.angle) * def.speed,
-      vy: Math.sin(data.angle) * def.speed,
-      damage: def.dmg + p.level * 4,
-      slow: def.slow || 0
-    });
-  });
-
-  socket.on("disconnect", () => delete players[socket.id]);
-});
-
-setInterval(() => {
-  // movement & mana
-  for (const id in players) {
-    const p = players[id];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
-    p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
-    p.mana = Math.min(100, p.mana + 0.15);
-    if (p.slow > 0) p.slow--;
-  }
-
-  // spells & collisions
-  for (let i = spells.length - 1; i >= 0; i--) {
-    const s = spells[i];
-    s.x += s.vx;
-    s.y += s.vy;
-    for (const id in players) {
-      if (id === s.owner) continue;
-      const p = players[id];
-      if (Math.hypot(p.x - s.x, p.y - s.y) < 18) {
-        p.hp -= s.damage;
-        if (s.slow) p.slow = s.slow;
-        if (p.hp <= 0) {
-          const killer = players[s.owner];
-          killer.xp += 50;
-          killer.level = 1 + Math.floor(killer.xp / 200);
-          p.hp = 100;
-          p.x = Math.random() * WORLD_SIZE;
-          p.y = Math.random() * WORLD_SIZE;
-        }
-        spells.splice(i, 1);
-        break;
-      }
-    }
-    if (
-      s.x < -100 || s.y < -100 ||
-      s.x > WORLD_SIZE + 100 ||
-      s.y > WORLD_SIZE + 100
-    ) spells.splice(i, 1);
-  }
-
-  // send state including upgrades
-  io.emit("state", { players, spells, upgrades });
-}, TICK);
-
-httpServer.listen(process.env.PORT || 3000);
+      vx: Math.cos(data.angle) * def*
