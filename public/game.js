@@ -12,18 +12,15 @@ canvas.height = innerHeight;
 minimap.width = 150; minimap.height = 150;
 
 const TILE = 64;
-const WORLD_SIZE = 40*TILE;
-
+let WORLD_SIZE = 40*1.5*TILE; // must match server
 let state = { players:{}, spells:[], crates:[] };
 let spellType = "fire";
 const keys = {};
 const particles = [];
 let camX=0, camY=0;
 
-window.addEventListener("keydown", e=>{
-  keys[e.key]=true;
-});
-window.addEventListener("keyup", e=>keys[e.key]=false);
+window.addEventListener("keydown", e=>{ keys[e.key]=true; });
+window.addEventListener("keyup", e=>{ keys[e.key]=false; });
 
 canvas.addEventListener("click", e=>{
   const me=state.players[socket.id]; if(!me) return;
@@ -72,14 +69,38 @@ function spawnParticles(spell){
     healing:["#ff00ff","#00ffff","#ffff00","#ff8800"]
   };
   for(let i=0;i<3;i++){
-    particles.push({x:spell.x,y:spell.y,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,life:30,color:colors[spell.type][Math.floor(Math.random()*colors[spell.type].length)]});
+    particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.5)*2,
+      vy:(Math.random()-0.5)*2,
+      life:30,
+      color:colors[spell.type][Math.floor(Math.random()*colors[spell.type].length)]
+    });
   }
 }
 
+// Draw grid dynamically based on camera & canvas size
 function drawGrid(){
   ctx.strokeStyle="#222";
-  for(let x=0;x<=WORLD_SIZE;x+=TILE) ctx.strokeRect(x+camX,camY,TILE,WORLD_SIZE);
-  for(let y=0;y<=WORLD_SIZE;y+=TILE) ctx.strokeRect(camX,y+camY,WORLD_SIZE,TILE);
+  const startX = Math.floor(-camX/TILE)*TILE;
+  const startY = Math.floor(-camY/TILE)*TILE;
+  const cols = Math.ceil(canvas.width/TILE) + 2;
+  const rows = Math.ceil(canvas.height/TILE) + 2;
+
+  for(let i=0;i<=cols;i++){
+    const x = startX + i*TILE + camX;
+    ctx.beginPath();
+    ctx.moveTo(x,0);
+    ctx.lineTo(x,canvas.height);
+    ctx.stroke();
+  }
+  for(let i=0;i<=rows;i++){
+    const y = startY + i*TILE + camY;
+    ctx.beginPath();
+    ctx.moveTo(0,y);
+    ctx.lineTo(canvas.width,y);
+    ctx.stroke();
+  }
 }
 
 function draw(){
@@ -153,19 +174,21 @@ function draw(){
     hotbar.appendChild(div);
   });
 
-  // Minimap
-  mmCtx.clearRect(0,0,150,150);
-  const mmScale=150/WORLD_SIZE;
+  // Minimap scaled to full WORLD_SIZE
+  mmCtx.clearRect(0,0,minimap.width,minimap.height);
+  const mmScaleX = minimap.width / WORLD_SIZE;
+  const mmScaleY = minimap.height / WORLD_SIZE;
+
   for(const id in state.players){
-    const p=state.players[id];
-    mmCtx.fillStyle=id===socket.id?"cyan":"red";
-    mmCtx.fillRect(p.x*mmScale,p.y*mmScale,4,4);
+    const p = state.players[id];
+    mmCtx.fillStyle = id===socket.id?"cyan":"red";
+    mmCtx.fillRect(p.x*mmScaleX,p.y*mmScaleY,4,4);
   }
   for(const c of state.crates){
     mmCtx.fillStyle="gold";
-    mmCtx.fillRect(c.x*mmScale,c.y*mmScale,4,4);
+    mmCtx.fillRect(c.x*mmScaleX,c.y*mmScaleY,4,4);
   }
 }
 
-function loop(){update(); draw(); requestAnimationFrame(loop);}
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
 loop();
