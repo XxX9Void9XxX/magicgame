@@ -6,9 +6,17 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
-// Increased map size by 1.5×
+// Serve static files
+app.use(express.static("public"));
+
+// Fix for Render: serve index.html on /
+app.get("/", (req, res) => {
+  res.sendFile("index.html", { root: "public" });
+});
+
+// Map & game settings
 const TILE = 64;
-const WORLD_TILES = Math.floor(40*1.5); // was 40
+const WORLD_TILES = Math.floor(40*1.5); // 1.5× bigger map
 const WORLD_SIZE = WORLD_TILES * TILE;
 const TICK = 1000 / 60;
 const CRATE_RESPAWN = 10000; // 10 seconds
@@ -21,7 +29,7 @@ const crates = [];
 const crateAbilities = ["ice","lightning","dark","light","poison","healing"];
 
 // Spawn 1.5× more crates initially
-const initialCrates = Math.floor(5 * 1.5); 
+const initialCrates = Math.floor(5 * 1.5);
 for(let i = 0; i < initialCrates; i++){
   crates.push({
     x: Math.random()*WORLD_SIZE,
@@ -31,6 +39,7 @@ for(let i = 0; i < initialCrates; i++){
 }
 
 io.on("connection", socket => {
+  // Player initialization
   players[socket.id] = {
     id: socket.id,
     x: Math.random()*WORLD_SIZE,
@@ -170,5 +179,4 @@ setInterval(()=>{
   io.emit("state",{players,spells,crates});
 }, TICK);
 
-httpServer.listen(process.env.PORT || 3000);
-
+httpServer.listen(process.env.PORT || 3000, () => console.log("Server running"));
