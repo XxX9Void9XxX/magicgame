@@ -44,22 +44,45 @@
       margin-top: 16px;
     }
 
-    /* PLAYER HEALTH BAR */
-    #health {
+    /* PLAYER HEALTH & MANA */
+    #health, #mana {
       position: fixed;
-      bottom: 85px;
       left: 50%;
       transform: translateX(-50%);
       width: 180px;
       height: 14px;
-      background: #400;
       border: 2px solid #000;
     }
 
+    #health {
+      bottom: 85px;
+      background: #400;
+    }
     #healthFill {
       height: 100%;
       background: #f00;
       width: 100%;
+    }
+
+    #mana {
+      bottom: 65px;
+      background: #003366;
+    }
+    #manaFill {
+      height: 100%;
+      background: #0af;
+      width: 100%;
+    }
+
+    /* MINIMAP */
+    #minimap {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 150px;
+      height: 150px;
+      background: #0008;
+      border: 2px solid #fff;
     }
   </style>
 </head>
@@ -70,11 +93,17 @@
     <div id="healthFill"></div>
   </div>
 
+  <div id="mana">
+    <div id="manaFill"></div>
+  </div>
+
   <div id="hotbar">
     <div class="slot selected"><span>Fire</span></div>
     <div class="slot"><span>Ice</span></div>
     <div class="slot"><span>⚡</span></div>
   </div>
+
+  <div id="minimap"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="game.js"></script>
