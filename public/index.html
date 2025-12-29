@@ -4,22 +4,77 @@
   <title>Magic Multiplayer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    canvas { display: block; }
-    #ui {
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+
+    /* HOTBAR */
+    #hotbar {
       position: fixed;
-      top: 10px;
-      left: 10px;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+    }
+
+    .slot {
+      width: 50px;
+      height: 50px;
+      background: #222;
+      border: 3px solid #555;
+      box-sizing: border-box;
+    }
+
+    .slot.selected {
+      border-color: #fff;
+    }
+
+    .slot span {
       color: white;
       font-family: sans-serif;
-      background: rgba(0,0,0,0.5);
-      padding: 8px;
+      font-size: 12px;
+      display: block;
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    /* PLAYER HEALTH BAR */
+    #health {
+      position: fixed;
+      bottom: 85px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 180px;
+      height: 14px;
+      background: #400;
+      border: 2px solid #000;
+    }
+
+    #healthFill {
+      height: 100%;
+      background: #f00;
+      width: 100%;
     }
   </style>
 </head>
 <body>
-  <div id="ui"></div>
   <canvas id="game"></canvas>
+
+  <div id="health">
+    <div id="healthFill"></div>
+  </div>
+
+  <div id="hotbar">
+    <div class="slot selected"><span>Fire</span></div>
+    <div class="slot"><span>Ice</span></div>
+    <div class="slot"><span>⚡</span></div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="game.js"></script>
