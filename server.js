@@ -34,8 +34,7 @@ io.on("connection", socket => {
     const p = players[socket.id];
     if (!p) return;
 
-    const speed = (p.slow > 0 ? 1.5 : 3);
-
+    const speed = p.slow > 0 ? 1.5 : 3;
     p.vx = 0;
     p.vy = 0;
 
@@ -49,19 +48,20 @@ io.on("connection", socket => {
     const p = players[socket.id];
     if (!p) return;
 
-    const spellsDef = {
-      fire: { cost: 20, speed: 10, dmg: 20 },
-      ice: { cost: 25, speed: 7, dmg: 15, slow: 90 },
+    const defs = {
+      fire: { cost: 20, speed: 9, dmg: 20 },
+      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
       lightning: { cost: 35, speed: 16, dmg: 40 }
     };
 
-    const def = spellsDef[data.type];
+    const def = defs[data.type];
     if (!def || p.mana < def.cost) return;
 
     p.mana -= def.cost;
 
     spells.push({
       owner: socket.id,
+      type: data.type,
       x: p.x,
       y: p.y,
       vx: Math.cos(data.angle) * def.speed,
@@ -77,13 +77,10 @@ io.on("connection", socket => {
 setInterval(() => {
   for (const id in players) {
     const p = players[id];
-
     p.x += p.vx;
     p.y += p.vy;
-
     p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
     p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
-
     p.mana = Math.min(100, p.mana + 0.15);
     if (p.slow > 0) p.slow--;
   }
@@ -97,7 +94,7 @@ setInterval(() => {
       if (id === s.owner) continue;
       const p = players[id];
 
-      if (Math.hypot(p.x - s.x, p.y - s.y) < 20) {
+      if (Math.hypot(p.x - s.x, p.y - s.y) < 18) {
         p.hp -= s.damage;
         if (s.slow) p.slow = s.slow;
 
@@ -105,7 +102,6 @@ setInterval(() => {
           const killer = players[s.owner];
           killer.xp += 50;
           killer.level = 1 + Math.floor(killer.xp / 200);
-
           p.hp = 100;
           p.x = Math.random() * WORLD_SIZE;
           p.y = Math.random() * WORLD_SIZE;
