@@ -34,7 +34,6 @@ canvas.addEventListener("click", e=>{
   socket.emit("cast",{angle,type:spellType});
 });
 
-// Scroll to change spell
 window.addEventListener("wheel", e=>{
   const me = state.players[socket.id]; if(!me) return;
   if(me.abilities.length <= 1) return;
@@ -44,7 +43,6 @@ window.addEventListener("wheel", e=>{
   spellType = me.abilities[idx];
 });
 
-// Dynamic hotbar
 hotbar.addEventListener("click", e=>{
   const me = state.players[socket.id]; if(!me) return;
   const slots = [...hotbar.children];
@@ -64,7 +62,15 @@ function update(){
 }
 
 function spawnParticles(spell){
-  const colors={fire:["#ff4500","#ff8c00","#ffaa00"],ice:["#aeefff","#dfffff"],lightning:["#fff700","#ffd700"]};
+  const colors={
+    fire:["#ff4500","#ff8c00","#ffaa00"],
+    ice:["#aeefff","#dfffff"],
+    lightning:["#fff700","#ffd700"],
+    dark:["#800080","#4b0082","#000"],
+    light:["#ffffff","#f0f8ff"],
+    poison:["#00ff00","#008000","#66ff66"],
+    healing:["#ff00ff","#00ffff","#ffff00","#ff8800"]
+  };
   for(let i=0;i<3;i++){
     particles.push({x:spell.x,y:spell.y,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,life:30,color:colors[spell.type][Math.floor(Math.random()*colors[spell.type].length)]});
   }
@@ -83,7 +89,7 @@ function draw(){
   camY+=(canvas.height/2-me.y-camY)*0.15;
   drawGrid();
 
-  // Draw players
+  // Players
   for(const id in state.players){
     const p=state.players[id];
     ctx.fillStyle=id===socket.id?"cyan":"red";
@@ -95,38 +101,52 @@ function draw(){
     ctx.fillStyle="#f00"; ctx.fillRect(p.x+camX-barWidth/2,p.y+camY-28,barWidth*hpPct,5);
   }
 
-  // Draw spells
+  // Spells
   for(const s of state.spells){
     spawnParticles(s);
     if(s.type==="fire"){ctx.fillStyle="orange";ctx.beginPath();ctx.arc(s.x+camX,s.y+camY,8,0,Math.PI*2);ctx.fill();}
     if(s.type==="ice"){ctx.fillStyle="#bff";ctx.beginPath();ctx.arc(s.x+camX,s.y+camY,10,0,Math.PI*2);ctx.fill();}
     if(s.type==="lightning"){ctx.strokeStyle="#ff0";ctx.beginPath();ctx.moveTo(s.x+camX,s.y+camY);ctx.lineTo(s.x+camX-s.vx*2,s.y+camY-s.vy*2);ctx.stroke();}
+    if(s.type==="dark"){ctx.fillStyle="#800080";ctx.beginPath();ctx.arc(s.x+camX,s.y+camY,12,0,Math.PI*2);ctx.fill();}
+    if(s.type==="light"){ctx.fillStyle="#fff";ctx.fillRect(s.x+camX-2,s.y+camY-2,4,4);}
+    if(s.type==="poison"){ctx.fillStyle="#0f0";ctx.beginPath();ctx.arc(s.x+camX,s.y+camY,10,0,Math.PI*2);ctx.fill();}
   }
 
-  // Draw particles
+  // Particles
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life--;
     ctx.fillStyle=p.color; ctx.globalAlpha=p.life/30; ctx.fillRect(p.x+camX,p.y+camY,3,3); ctx.globalAlpha=1;
     if(p.life<=0) particles.splice(i,1);
   }
 
-  // Draw crates
+  // Crates
   for(const c of state.crates){
     ctx.font="28px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText("📦", c.x+camX, c.y+camY);
+    let emoji = "📦";
+    if(c.ability==="ice") emoji="❄️";
+    if(c.ability==="lightning") emoji="⚡";
+    if(c.ability==="dark") emoji="🌌";
+    if(c.ability==="light") emoji="✨";
+    if(c.ability==="poison") emoji="☠️";
+    if(c.ability==="healing") emoji="🌈";
+    ctx.fillText(emoji, c.x+camX, c.y+camY);
   }
 
-  // Player UI
+  // UI
   healthFill.style.width=`${me.hp}%`;
   manaFill.style.width=`${me.mana}%`;
 
-  // Dynamic hotbar display
+  // Hotbar
   hotbar.innerHTML="";
   me.abilities.forEach(a=>{
-    let emoji = "🔥";
+    let emoji="🔥";
     if(a==="ice") emoji="❄️";
     if(a==="lightning") emoji="⚡";
-    const div = document.createElement("div");
+    if(a==="dark") emoji="🌌";
+    if(a==="light") emoji="✨";
+    if(a==="poison") emoji="☠️";
+    if(a==="healing") emoji="🌈";
+    const div=document.createElement("div");
     div.classList.add("slot");
     if(a===spellType) div.classList.add("selected");
     div.textContent=emoji;
