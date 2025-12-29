@@ -2,7 +2,6 @@ const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const healthFill = document.getElementById("healthFill");
-const manaFill = document.getElementById("manaFill");
 const slots = document.querySelectorAll(".slot");
 const minimap = document.getElementById("minimap");
 const mmCtx = minimap.getContext("2d");
@@ -14,7 +13,7 @@ minimap.width = 150; minimap.height = 150;
 const TILE = 64;
 const WORLD_SIZE = 40*TILE;
 
-let state = { players:{}, spells:[] };
+let state = { players:{}, spells:[], crates:[] };
 let spellType = "fire";
 const keys = {};
 const particles = [];
@@ -112,9 +111,16 @@ function draw(){
     if(p.life<=0) particles.splice(i,1);
   }
 
+  // Draw crates
+  for(const c of state.crates){
+    ctx.font="28px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    const emoji = c.ability==="ice"?"❄️":"⚡";
+    ctx.fillText("📦", c.x+camX, c.y+camY); // box
+    ctx.fillText(emoji, c.x+camX, c.y+camY); // show ability inside
+  }
+
   // Player UI
   healthFill.style.width=`${me.hp}%`;
-  manaFill.style.width=`${me.mana}%`;
 
   // Minimap
   mmCtx.clearRect(0,0,150,150);
@@ -123,6 +129,10 @@ function draw(){
     const p=state.players[id];
     mmCtx.fillStyle=id===socket.id?"cyan":"red";
     mmCtx.fillRect(p.x*mmScale,p.y*mmScale,4,4);
+  }
+  for(const c of state.crates){
+    mmCtx.fillStyle="gold";
+    mmCtx.fillRect(c.x*mmScale,c.y*mmScale,4,4);
   }
 }
 
