@@ -1,7 +1,9 @@
 const socket = io();
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const ui = document.getElementById("ui");
+
+const healthFill = document.getElementById("healthFill");
+const slots = document.querySelectorAll(".slot");
 
 canvas.width = innerWidth;
 canvas.height = innerHeight;
@@ -18,11 +20,19 @@ let camX = 0, camY = 0;
 
 window.addEventListener("keydown", e => {
   keys[e.key] = true;
-  if (e.key === "1") spellType = "fire";
-  if (e.key === "2") spellType = "ice";
-  if (e.key === "3") spellType = "lightning";
+
+  if (e.key === "1") selectSpell("fire", 0);
+  if (e.key === "2") selectSpell("ice", 1);
+  if (e.key === "3") selectSpell("lightning", 2);
 });
+
 window.addEventListener("keyup", e => keys[e.key] = false);
+
+function selectSpell(type, index) {
+  spellType = type;
+  slots.forEach(s => s.classList.remove("selected"));
+  slots[index].classList.add("selected");
+}
 
 canvas.addEventListener("click", e => {
   const me = state.players[socket.id];
@@ -45,25 +55,6 @@ function update() {
   });
 }
 
-function spawnParticles(spell) {
-  const colors = {
-    fire: ["#ff4500", "#ff8c00", "#ffaa00"],
-    ice: ["#aeefff", "#dfffff"],
-    lightning: ["#fff700", "#ffd700"]
-  };
-
-  for (let i = 0; i < 3; i++) {
-    particles.push({
-      x: spell.x,
-      y: spell.y,
-      vx: (Math.random() - 0.5) * 2,
-      vy: (Math.random() - 0.5) * 2,
-      life: 30,
-      color: colors[spell.type][Math.floor(Math.random() * colors[spell.type].length)]
-    });
-  }
-}
-
 function drawGrid() {
   ctx.strokeStyle = "#222";
   for (let x = 0; x <= WORLD_SIZE; x += TILE)
@@ -83,18 +74,38 @@ function draw() {
 
   drawGrid();
 
-  for (const s of state.spells) spawnParticles(s);
-
-  // players
+  /* PLAYERS + HEALTH BARS */
   for (const id in state.players) {
     const p = state.players[id];
+
+    // player
     ctx.fillStyle = id === socket.id ? "cyan" : "red";
     ctx.beginPath();
     ctx.arc(p.x + camX, p.y + camY, 16, 0, Math.PI * 2);
     ctx.fill();
+
+    // health bar
+    const barWidth = 32;
+    const hpPct = p.hp / 100;
+
+    ctx.fillStyle = "#400";
+    ctx.fillRect(
+      p.x + camX - barWidth / 2,
+      p.y + camY - 28,
+      barWidth,
+      5
+    );
+
+    ctx.fillStyle = "#f00";
+    ctx.fillRect(
+      p.x + camX - barWidth / 2,
+      p.y + camY - 28,
+      barWidth * hpPct,
+      5
+    );
   }
 
-  // spells core
+  /* SPELL VISUALS */
   for (const s of state.spells) {
     if (s.type === "fire") {
       ctx.fillStyle = "orange";
@@ -102,12 +113,14 @@ function draw() {
       ctx.arc(s.x + camX, s.y + camY, 8, 0, Math.PI * 2);
       ctx.fill();
     }
+
     if (s.type === "ice") {
       ctx.fillStyle = "#bff";
       ctx.beginPath();
       ctx.arc(s.x + camX, s.y + camY, 10, 0, Math.PI * 2);
       ctx.fill();
     }
+
     if (s.type === "lightning") {
       ctx.strokeStyle = "#ff0";
       ctx.beginPath();
@@ -120,40 +133,8 @@ function draw() {
     }
   }
 
-  // particles
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life--;
-
-    ctx.fillStyle = p.color;
-    ctx.globalAlpha = p.life / 30;
-    ctx.fillRect(p.x + camX, p.y + camY, 3, 3);
-    ctx.globalAlpha = 1;
-
-    if (p.life <= 0) particles.splice(i, 1);
-  }
-
-  // minimap
-  ctx.fillStyle = "#000a";
-  ctx.fillRect(canvas.width - 160, 10, 150, 150);
-  for (const id in state.players) {
-    const p = state.players[id];
-    ctx.fillStyle = id === socket.id ? "cyan" : "red";
-    ctx.fillRect(
-      canvas.width - 160 + (p.x / WORLD_SIZE) * 150,
-      10 + (p.y / WORLD_SIZE) * 150,
-      4, 4
-    );
-  }
-
-  ui.innerHTML = `
-    HP: ${me.hp}<br>
-    Mana: ${me.mana.toFixed(0)}<br>
-    Level: ${me.level}<br>
-    Spell: ${spellType} (1/2/3)
-  `;
+  /* PLAYER UI HEALTH */
+  healthFill.style.width = `${me.hp}%`;
 }
 
 function loop() {
@@ -161,4 +142,5 @@ function loop() {
   draw();
   requestAnimationFrame(loop);
 }
+
 loop();
