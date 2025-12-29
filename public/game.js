@@ -14,11 +14,15 @@ minimap.width = 150; minimap.height = 150;
 const TILE = 64;
 const WORLD_SIZE = 40*TILE;
 
-let state = { players:{}, spells:[] };
+let state = { players:{}, spells:[], upgrades:[] };
 let spellType = "fire";
 const keys = {};
 const particles = [];
 let camX=0, camY=0;
+
+// Upgrade spawn settings
+const UPGRADE_TYPES = [{type:"mana", emoji:"💧"}];
+const UPGRADE_RESPAWN = 5000; // ms
 
 window.addEventListener("keydown", e=>{
   keys[e.key]=true;
@@ -69,18 +73,19 @@ function draw(){
   camY+=(canvas.height/2-me.y-camY)*0.15;
   drawGrid();
 
+  // Draw players
   for(const id in state.players){
     const p=state.players[id];
     ctx.fillStyle=id===socket.id?"cyan":"red";
     ctx.beginPath();
     ctx.arc(p.x+camX,p.y+camY,16,0,Math.PI*2); ctx.fill();
 
-    // health bar
     const barWidth=32, hpPct=p.hp/100;
     ctx.fillStyle="#400"; ctx.fillRect(p.x+camX-barWidth/2,p.y+camY-28,barWidth,5);
     ctx.fillStyle="#f00"; ctx.fillRect(p.x+camX-barWidth/2,p.y+camY-28,barWidth*hpPct,5);
   }
 
+  // Draw spells
   for(const s of state.spells){
     spawnParticles(s);
     if(s.type==="fire"){ctx.fillStyle="orange";ctx.beginPath();ctx.arc(s.x+camX,s.y+camY,8,0,Math.PI*2);ctx.fill();}
@@ -88,17 +93,30 @@ function draw(){
     if(s.type==="lightning"){ctx.strokeStyle="#ff0";ctx.beginPath();ctx.moveTo(s.x+camX,s.y+camY);ctx.lineTo(s.x+camX-s.vx*2,s.y+camY-s.vy*2);ctx.stroke();}
   }
 
-  // particles
+  // Draw particles
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life--;
     ctx.fillStyle=p.color; ctx.globalAlpha=p.life/30; ctx.fillRect(p.x+camX,p.y+camY,3,3); ctx.globalAlpha=1;
     if(p.life<=0) particles.splice(i,1);
   }
 
+  // Draw upgrades (mana pickups)
+  for(let i=0;i<state.upgrades.length;i++){
+    const u = state.upgrades[i];
+    ctx.font="28px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("💧", u.x + camX, u.y + camY);
+    if(me && Math.hypot(me.x-u.x, me.y-u.y)<20){
+      me.mana=Math.min(100, me.mana+50);
+      state.upgrades.splice(i,1);
+      setTimeout(()=>{state.upgrades.push({x:Math.random()*WORLD_SIZE, y:Math.random()*WORLD_SIZE})},UPGRADE_RESPAWN);
+    }
+  }
+
+  // Player UI
   healthFill.style.width=`${me.hp}%`;
   manaFill.style.width=`${me.mana}%`;
 
-  // minimap
+  // Minimap
   mmCtx.clearRect(0,0,150,150);
   const mmScale=150/WORLD_SIZE;
   for(const id in state.players){
@@ -106,6 +124,15 @@ function draw(){
     mmCtx.fillStyle=id===socket.id?"cyan":"red";
     mmCtx.fillRect(p.x*mmScale,p.y*mmScale,4,4);
   }
+  for(const u of state.upgrades){
+    mmCtx.fillStyle="blue";
+    mmCtx.fillRect(u.x*mmScale,u.y*mmScale,4,4);
+  }
+}
+
+// Initial random upgrade spawn
+for(let i=0;i<5;i++){
+  state.upgrades.push({x:Math.random()*WORLD_SIZE, y:Math.random()*WORLD_SIZE});
 }
 
 function loop(){update(); draw(); requestAnimationFrame(loop);}
