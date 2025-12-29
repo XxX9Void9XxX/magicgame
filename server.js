@@ -22,7 +22,11 @@ const crateAbilities = ["ice","lightning"]; // Can add more later
 
 // Spawn initial crates
 for(let i = 0; i < 5; i++){
-  crates.push({x: Math.random()*WORLD_SIZE, y: Math.random()*WORLD_SIZE, ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]});
+  crates.push({
+    x: Math.random()*WORLD_SIZE,
+    y: Math.random()*WORLD_SIZE,
+    ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]
+  });
 }
 
 io.on("connection", socket => {
@@ -58,7 +62,7 @@ io.on("connection", socket => {
 
     const defs = {
       fire: { cost: 20, speed: 9, dmg: 20 },
-      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 },
+      ice: { cost: 25, speed: 6, dmg: 15, slow: 90 }, // Ice slows
       lightning: { cost: 35, speed: 16, dmg: 40 }
     };
     const def = defs[data.type];
@@ -102,7 +106,8 @@ setInterval(()=>{
       const p = players[id];
       if(Math.hypot(p.x-s.x,p.y-s.y)<18){
         p.hp -= s.damage;
-        if(s.slow) p.slow = s.slow;
+        if(s.slow) p.slow = s.slow; // Apply slow for Ice
+
         if(p.hp<=0){
           const killer = players[s.owner];
           killer.xp+=50;
@@ -128,18 +133,25 @@ setInterval(()=>{
     if(s.x<-100||s.y<-100||s.x>WORLD_SIZE+100||s.y>WORLD_SIZE+100) spells.splice(i,1);
   }
 
-  // Crates pickups
+  // Crate pickups (only if player doesn't already have ability)
   for(let i=crates.length-1;i>=0;i--){
     const c = crates[i];
     for(const id in players){
       const p = players[id];
       if(Math.hypot(p.x-c.x,p.y-c.y)<20){
-        if(!p.abilities.includes(c.ability)) p.abilities.push(c.ability);
-        crates.splice(i,1);
-        setTimeout(()=>{
-          crates.push({x: Math.random()*WORLD_SIZE, y: Math.random()*WORLD_SIZE, ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]});
-        }, CRATE_RESPAWN);
-        break;
+        if(!p.abilities.includes(c.ability)){
+          p.abilities.push(c.ability);
+          crates.splice(i,1);
+          // Respawn new crate
+          setTimeout(()=>{
+            crates.push({
+              x: Math.random()*WORLD_SIZE,
+              y: Math.random()*WORLD_SIZE,
+              ability: crateAbilities[Math.floor(Math.random()*crateAbilities.length)]
+            });
+          }, 10000);
+        }
+        break; // if player already has it, crate stays
       }
     }
   }
