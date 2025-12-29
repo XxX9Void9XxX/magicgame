@@ -12,7 +12,7 @@ canvas.height = innerHeight;
 minimap.width = 150; minimap.height = 150;
 
 const TILE = 64;
-let WORLD_SIZE = 40*1.5*TILE; // must match server
+let WORLD_SIZE = 40*1.5*TILE;
 let state = { players:{}, spells:[], crates:[] };
 let spellType = "fire";
 const keys = {};
@@ -58,28 +58,74 @@ function update(){
   socket.emit("move",{w:keys.w,a:keys.a,s:keys.s,d:keys.d});
 }
 
+// Fancy particle effects for spells
 function spawnParticles(spell){
-  const colors={
-    fire:["#ff4500","#ff8c00","#ffaa00"],
-    ice:["#aeefff","#dfffff"],
-    lightning:["#fff700","#ffd700"],
-    dark:["#800080","#4b0082","#000"],
-    light:["#ffffff","#f0f8ff"],
-    poison:["#00ff00","#008000","#66ff66"],
-    healing:["#ff00ff","#00ffff","#ffff00","#ff8800"]
-  };
-  for(let i=0;i<3;i++){
-    particles.push({
+  if(spell.type==="fire"){
+    for(let i=0;i<3;i++) particles.push({
       x:spell.x, y:spell.y,
       vx:(Math.random()-0.5)*2,
       vy:(Math.random()-0.5)*2,
       life:30,
-      color:colors[spell.type][Math.floor(Math.random()*colors[spell.type].length)]
+      color: ["#ff4500","#ff8c00","#ffaa00"][Math.floor(Math.random()*3)]
+    });
+  }
+  if(spell.type==="ice"){
+    for(let i=0;i<3;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.5)*2,
+      vy:(Math.random()-0.5)*2,
+      life:40,
+      color: ["#aeefff","#dfffff"][Math.floor(Math.random()*2)]
+    });
+  }
+  if(spell.type==="lightning"){
+    for(let i=0;i<2;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.3)*1.5,
+      vy:(Math.random()-0.3)*1.5,
+      life:20,
+      color:"#ffff00"
+    });
+  }
+  if(spell.type==="dark"){
+    for(let i=0;i<4;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.5)*1.5,
+      vy:(Math.random()-0.5)*1.5,
+      life:50,
+      color: ["#800080","#4b0082","#000"][Math.floor(Math.random()*3)]
+    });
+  }
+  if(spell.type==="light"){
+    for(let i=0;i<3;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.5)*1,
+      vy:(Math.random()-0.5)*1,
+      life:25,
+      color: ["#ffffff","#f0f8ff"][Math.floor(Math.random()*2)]
+    });
+  }
+  if(spell.type==="poison"){
+    for(let i=0;i<3;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.3)*1.5,
+      vy:(Math.random()-0.3)*1.5,
+      life:35,
+      color: ["#00ff00","#008000","#66ff66"][Math.floor(Math.random()*3)]
+    });
+  }
+  if(spell.type==="healing"){
+    for(let i=0;i<4;i++) particles.push({
+      x:spell.x, y:spell.y,
+      vx:(Math.random()-0.5)*1,
+      vy:(Math.random()-0.5)*1,
+      life:40,
+      color: ["#ff00ff","#00ffff","#ffff00","#ff8800"][Math.floor(Math.random()*4)]
     });
   }
 }
 
-// Draw grid dynamically based on camera & canvas size
+// Grid
 function drawGrid(){
   ctx.strokeStyle="#222";
   const startX = Math.floor(-camX/TILE)*TILE;
@@ -108,7 +154,13 @@ function draw(){
   const me=state.players[socket.id]; if(!me) return;
   camX+=(canvas.width/2-me.x-camX)*0.15;
   camY+=(canvas.height/2-me.y-camY)*0.15;
+
   drawGrid();
+
+  // Map border
+  ctx.strokeStyle="white";
+  ctx.lineWidth=4;
+  ctx.strokeRect(camX, camY, WORLD_SIZE, WORLD_SIZE);
 
   // Players
   for(const id in state.players){
@@ -136,7 +188,7 @@ function draw(){
   // Particles
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life--;
-    ctx.fillStyle=p.color; ctx.globalAlpha=p.life/30; ctx.fillRect(p.x+camX,p.y+camY,3,3); ctx.globalAlpha=1;
+    ctx.fillStyle=p.color; ctx.globalAlpha=p.life/40; ctx.fillRect(p.x+camX,p.y+camY,3,3); ctx.globalAlpha=1;
     if(p.life<=0) particles.splice(i,1);
   }
 
@@ -174,7 +226,7 @@ function draw(){
     hotbar.appendChild(div);
   });
 
-  // Minimap scaled to full WORLD_SIZE
+  // Minimap
   mmCtx.clearRect(0,0,minimap.width,minimap.height);
   const mmScaleX = minimap.width / WORLD_SIZE;
   const mmScaleY = minimap.height / WORLD_SIZE;
