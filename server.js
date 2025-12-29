@@ -107,9 +107,19 @@ setInterval(()=>{
           const killer = players[s.owner];
           killer.xp+=50;
           killer.level = 1+Math.floor(killer.xp/200);
+
+          // Drop non-fire abilities as crates
+          const dropAbilities = p.abilities.filter(a=>a!=="fire");
+          for(const a of dropAbilities){
+            crates.push({x: p.x, y: p.y, ability: a});
+          }
+
+          // Respawn player
           p.hp=100;
+          p.mana=100;
           p.x=Math.random()*WORLD_SIZE;
           p.y=Math.random()*WORLD_SIZE;
+          p.abilities = ["fire"];
         }
         spells.splice(i,1);
         break;
@@ -118,7 +128,7 @@ setInterval(()=>{
     if(s.x<-100||s.y<-100||s.x>WORLD_SIZE+100||s.y>WORLD_SIZE+100) spells.splice(i,1);
   }
 
-  // Crates
+  // Crates pickups
   for(let i=crates.length-1;i>=0;i--){
     const c = crates[i];
     for(const id in players){
