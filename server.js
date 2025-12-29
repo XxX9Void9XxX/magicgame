@@ -111,3 +111,15 @@ setInterval(() => {
         break;
       }
     }
+
+    if (
+      s.x < -100 || s.y < -100 ||
+      s.x > WORLD_SIZE + 100 ||
+      s.y > WORLD_SIZE + 100
+    ) spells.splice(i, 1);
+  }
+
+  io.emit("state", { players, spells });
+}, TICK);
+
+httpServer.listen(process.env.PORT || 3000);
